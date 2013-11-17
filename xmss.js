@@ -1,5 +1,6 @@
-var crypto = require('crypto');
-function hash256(data){
+var crypto = require('crypto'),
+    buffer = require('buffer');
+function hash_n(data){
     var algorithm = 'sha256', encoding = 'binary';
     var digestor = new crypto.createHash(algorithm);
     digestor.update(data, encoding);
@@ -7,27 +8,188 @@ function hash256(data){
     return buffer.toString('binary');
 };
 
+function rebase_string(string, w_bits){
+    var binstr = '';
+    var buf = new buffer.Buffer(string, 'ascii');
+    string = buf.toString('hex');
+    for(var i=0; i<string.length; i++){
+        var b = parseInt(string.substr(i,1), 16).toString(2);
+        binstr += '0000'.substr(0, 4-b.length) + b;
+    };
+    
+    var pad_zero_count = binstr.length % w_bits;
+    if(pad_zero_count > 0)
+        binstr = '000000000000000000000'.substr(0, w_bits - pad_zero_count);
+
+    var result = [];
+    while(binstr != ''){
+        var fetch = binstr.substr(0, w_bits);
+        binstr = binstr.substr(w_bits);
+        result.push(parseInt(fetch, 2));
+    };
+    return result;
+};
+
 function xmss(){
+    /* 
+     * In this sample, the Winternitz parameter is implemented to be
+     * exponents of 2. This makes sense, in the author's opinion, because
+     * the Winternitz method is trying to reduce the count of total hashes
+     * in a signature by representing the message being signed with a larger 
+     * base. And it is easier, to break up the input and use 1 and 0s to
+     * divide.
+     */
+    var w_bits = 3;
     
     var n = 256,    // the security parameter
-        w = 2,      // w>1, the Winternitz parameter
+        w = Math.pow(2, w_bits), 
+                    // w>1, the Winternitz parameter
         m = 256,    // the message length in bits
 
         H = 80,     // the tree height, 
                     // XMSS allows to make 2**H signatures using one key pair
-        x = hash256('XMSS');
+        x = hash_n('XMSS');
                     // used to construct one-time verification keys
 
     // a function family
-    function f_K(string_of_n){
+    function f_K(K, e, string_of_n){
+        assert(string_of_n.length * 8 == n);
+        assert(K.length * 8 == n);
+
+        if(0 == e)
+            return K;
+        else{
+            var K_ = f_K(K, e-1, string_of_n);
+            return hash_n(K_ + '||' + string_of_n);
+        };
+
     };
 
     function h_K(string_of_2n){
         // a hash function, choosen randomly with the uniform distribution
         // from the family H.
+        assert(string_of_2n.length * 4 == n);
+
     };
 
     /* ABOVE PARAMETERS ARE PUBLICLY KNOWN. */
+
+    
+    var Winternitz_OTS = function(){
+        var self = this;
+
+        var l_1 = Math.ceil(m / Math.log(w)),
+            l_2 = Math.floor(Math.log(l_1 * (w - 1)) / Math.log(w)) + 1,
+            l = l_1 + l_2;
+
+        var signature_key = false;
+        var verification_key = false;
+
+        this.generate_signature_key = function(){
+            /*
+             * The secret signature key of W-OTS consists of l n-bit strings
+             * sk_i , 1 <= i <= l chosen uniformly at random.
+             */
+            
+            var result = [];
+            for(var i=1; i<=l; i++){
+                result.push(crypto.randomBytes(n / 8));
+            };
+            return result;
+        };
+
+        this.set_signature_key = function(sk_i){
+            assert(sk_i.length == l);
+            for(var i=1; i<=l; i++){
+                assert(n / 8 == sk_i[i].length);
+            };
+            signature_key = sk_i;
+        };
+
+        this.set_verification_key = function(pk_i){
+            assert(pk_i.length == l);
+            for(var i=1; i<=l; i++){
+                assert(n / 8 == pk_i[i].length);
+            };
+            verification_key = pk_i;
+        };
+
+        this.get_verification_key = function(){
+            if(verification_key != false) return verification_key;
+            /*
+             * The public verification key is computed as
+             *  pk = (pk_1, ..., pk_l)=(f_sk_1^w-1(x), ..., f_sk_l^(w-1)(x)),
+             * with f^(w-1) as defined above.
+             */
+            if(false == signature_key)
+                throw Error();
+
+            var pk = [];
+            for(i=0; i<=l; i++){
+                var pk_i = f(signature_key[i], w-1, x);
+                pk.push(pk_i);
+            };
+
+            return pk;
+        };
+
+        function b_l(message){
+            var M = [], b = [], C = 0;
+            // W-OTS signs messages of binary length m.
+            assert(m * 8 == message.length);
+
+            // They are processed in base w representation.
+            M = rebase_string(message, w_bits);
+            assert(l_1 == M.length);
+
+            // The checksum ...
+            for(var i=0; i<=l_1; i++){
+                C += w - 1 - M[i];
+            };
+
+            // in base w representation... 
+            C = C.toString(w);
+
+            // is appended to M.
+            M.push(C);
+            
+            // It is of length l_2
+            assert(l_2 == C.length);
+
+            // The result is (b_1, ..., b_l)
+            b = M.slice(0, M.length);
+
+            assert(l == b.length);
+
+            return b;            
+        };
+
+        this.sign = function(message){
+            var b = b_l(message);
+            
+            // The signature of M is
+            var sigma = [];
+            for(var i=0; i<=l; i++){
+                var sigma_i = f(signature_key[i], b[i], x);
+                sigma.push(sigma_i);
+            };
+            return sigma;
+        };
+
+        this.verify = function(message, pk_0, signature){
+            // It is verified by constructing (b_1, ..., b_l)...
+            var b = b_l(message)
+
+            var pk = self.get_verification_key();
+
+            // and checking
+            for(var i=0; i<=l; i++){
+                if(pk[i] != f(signature[i], w-1-b[i], pk_0)) return false;
+            };
+
+            return true;
+        };
+    };
 
 };
 
