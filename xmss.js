@@ -189,11 +189,9 @@ function xmss(){
 
             // and checking
             for(var i=1; i<=l; i++){
-                if(
-                    pk[i-1] !=
-                    f_K(signature[0][i-1], w-1-b[i-1], signature[1])
-                ){
-                    console.log('failed @ ' + i);
+                var left = pk[i-1].toString('hex'),
+                    right = f_K(signature[0][i-1], w-1-b[i-1], signature[1]).toString('hex');
+                if(left != right){
                     return false;
                 };
             };
