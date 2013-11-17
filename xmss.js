@@ -5,7 +5,7 @@ function hash_n(data){
     var digestor = new crypto.createHash(algorithm);
     digestor.update(data, encoding);
     var buffer = digestor.digest();
-    return buffer.toString('binary');
+    return buffer;
 };
 
 function rebase_string(string, w_bits){
@@ -16,10 +16,13 @@ function rebase_string(string, w_bits){
         var b = parseInt(string.substr(i,1), 16).toString(2);
         binstr += '0000'.substr(0, 4-b.length) + b;
     };
-    
+
     var pad_zero_count = binstr.length % w_bits;
     if(pad_zero_count > 0)
-        binstr = '000000000000000000000'.substr(0, w_bits - pad_zero_count);
+        binstr = 
+            '000000000000000000000'.substr(0, w_bits - pad_zero_count)
+            + binstr
+        ;
 
     var result = [];
     while(binstr != ''){
@@ -27,6 +30,7 @@ function rebase_string(string, w_bits){
         binstr = binstr.substr(w_bits);
         result.push(parseInt(fetch, 2));
     };
+    console.log(result.join('|'));
     return result;
 };
 
@@ -39,7 +43,7 @@ function xmss(){
      * base. And it is easier, to break up the input and use 1 and 0s to
      * divide.
      */
-    var w_bits = 3;
+    var w_bits = 4; // currently <= 5 is OK. larger not implemented.
     
     var n = 256,    // the security parameter
         w = Math.pow(2, w_bits), 
@@ -53,8 +57,8 @@ function xmss(){
 
     // a function family
     function f_K(K, e, string_of_n){
-        assert(string_of_n.length * 8 == n);
-        assert(K.length * 8 == n);
+        if(string_of_n.length * 8 != n) throw Error();
+        if(K.length * 8 != n) throw Error();
 
         if(0 == e)
             return K;
@@ -78,7 +82,7 @@ function xmss(){
     var Winternitz_OTS = function(){
         var self = this;
 
-        var l_1 = Math.ceil(m / Math.log(w)),
+        var l_1 = Math.ceil(m / Math.log(w) * Math.log(2)),
             l_2 = Math.floor(Math.log(l_1 * (w - 1)) / Math.log(w)) + 1,
             l = l_1 + l_2;
 
@@ -99,9 +103,9 @@ function xmss(){
         };
 
         this.set_signature_key = function(sk_i){
-            assert(sk_i.length == l);
+            if(sk_i.length != l) throw Error();
             for(var i=1; i<=l; i++){
-                assert(n / 8 == sk_i[i].length);
+                if(n / 8 != sk_i[i-1].length) throw Error();
             };
             signature_key = sk_i;
         };
@@ -109,7 +113,7 @@ function xmss(){
         this.set_verification_key = function(pk_i){
             assert(pk_i.length == l);
             for(var i=1; i<=l; i++){
-                assert(n / 8 == pk_i[i].length);
+                assert(n / 8 == pk_i[i-1].length);
             };
             verification_key = pk_i;
         };
@@ -125,8 +129,8 @@ function xmss(){
                 throw Error();
 
             var pk = [];
-            for(i=0; i<=l; i++){
-                var pk_i = f(signature_key[i], w-1, x);
+            for(i=1; i<=l; i++){
+                var pk_i = f_K(signature_key[i-1], w-1, x);
                 pk.push(pk_i);
             };
 
@@ -136,30 +140,31 @@ function xmss(){
         function b_l(message){
             var M = [], b = [], C = 0;
             // W-OTS signs messages of binary length m.
-            assert(m * 8 == message.length);
+            if(m != message.length * 8) throw Error();
 
             // They are processed in base w representation.
             M = rebase_string(message, w_bits);
-            assert(l_1 == M.length);
-
+            console.log(l_1, l_2, M.length, C);
+            if(l_1 != M.length) throw Error();
             // The checksum ...
-            for(var i=0; i<=l_1; i++){
-                C += w - 1 - M[i];
+            for(var i=1; i<=l_1; i++){
+                C += w - 1 - M[i-1];
             };
 
             // in base w representation... 
-            C = C.toString(w);
+            C = C.toString(w).split('');
 
             // is appended to M.
-            M.push(C);
+            b = M.slice(0, M.length);
+            for(var i in C)
+                b.push(parseInt(C[i], w));
             
             // It is of length l_2
-            assert(l_2 == C.length);
+            if(l_2 != C.length) throw Error();
 
             // The result is (b_1, ..., b_l)
-            b = M.slice(0, M.length);
 
-            assert(l == b.length);
+            if(l != b.length) throw Error();
 
             return b;            
         };
@@ -169,28 +174,50 @@ function xmss(){
             
             // The signature of M is
             var sigma = [];
-            for(var i=0; i<=l; i++){
-                var sigma_i = f(signature_key[i], b[i], x);
+            for(var i=1; i<=l; i++){
+                var sigma_i = f_K(signature_key[i-1], b[i-1], x);
                 sigma.push(sigma_i);
             };
-            return sigma;
+            return [sigma, x];
         };
 
-        this.verify = function(message, pk_0, signature){
+        this.verify = function(message, signature){
             // It is verified by constructing (b_1, ..., b_l)...
-            var b = b_l(message)
+            var b = b_l(message);
 
             var pk = self.get_verification_key();
 
             // and checking
-            for(var i=0; i<=l; i++){
-                if(pk[i] != f(signature[i], w-1-b[i], pk_0)) return false;
+            for(var i=1; i<=l; i++){
+                if(
+                    pk[i-1] !=
+                    f_K(signature[0][i-1], w-1-b[i-1], signature[1])
+                ){
+                    console.log('failed @ ' + i);
+                    return false;
+                };
             };
 
             return true;
         };
+
+        return this;
     };
 
+    this.winternitz = Winternitz_OTS;
+
+    return this;
 };
 
-var x = xmss();
+var x = new xmss();
+
+var test = new x.winternitz();
+var secretkey = test.generate_signature_key();
+test.set_signature_key(secretkey);
+var publickey = test.get_verification_key();
+
+var signtext = hash_n('abc');
+
+var signature = test.sign(hash_n('abc'));
+var verify = test.verify(signtext, signature);
+console.log(verify);
