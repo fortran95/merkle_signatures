@@ -1,3 +1,14 @@
+/*
+ * This is a demostration of the paper:
+ *  XMSS – A Practical Forward Secure Signature Scheme based on
+ *  Minimal Security Assumptions
+ * from Johannes Buchmann, Erik Dahmen, and Andreas Huelsing.
+ *
+ * This is NOT offical at all! Use this file at your own risk, and your
+ * reading of this paper before using is appreciated. I'm doing only on my
+ * own understandings.
+ */
+
 var crypto = require('crypto'),
     buffer = require('buffer');
 function hash_n(data){
