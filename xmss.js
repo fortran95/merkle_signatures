@@ -30,7 +30,6 @@ function rebase_string(string, w_bits){
         binstr = binstr.substr(w_bits);
         result.push(parseInt(fetch, 2));
     };
-    console.log(result.join('|'));
     return result;
 };
 
@@ -144,7 +143,6 @@ function xmss(){
 
             // They are processed in base w representation.
             M = rebase_string(message, w_bits);
-            console.log(l_1, l_2, M.length, C);
             if(l_1 != M.length) throw Error();
             // The checksum ...
             for(var i=1; i<=l_1; i++){
@@ -214,7 +212,7 @@ var secretkey = test.generate_signature_key();
 test.set_signature_key(secretkey);
 var publickey = test.get_verification_key();
 
-var signtext = hash_n('abc');
+var signtext = hash_n('abc'), faketext = hash_n('cde');
 
 var signature = test.sign(hash_n('abc'));
 var verify = test.verify(signtext, signature);
