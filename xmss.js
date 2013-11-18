@@ -88,6 +88,42 @@ function xmss(){
 
     /* ABOVE PARAMETERS ARE PUBLICLY KNOWN. */
 
+
+    /*
+     * Treehash algorithm
+     *
+     * A basic tool to compute inner nodes of a Merkle tree is the treehash 
+     * algorithm. This algorithm uses a stack with the usual push and pop
+     * operations and the Leafcalc(phi) routine which computes the phi_th
+     * leaf.
+     *
+     * A leaf or a node is an array in form of [value, height].
+     */
+    function Treehash(Leafcalc){
+        var stack = [];
+
+        this.feed = function(phi){
+            var Leaf = Leafcalc(phi);
+            while(
+                stack.length > 0 &&
+                Leaf[1] == stack[stack.length - 1][1]
+            ){
+                var topNode = stack.pop();
+                Leaf[0] = hash_n(topNode[0] + Leaf[0]);
+                
+                // I think after this the Leaf is raised a height?
+                Leaf[1] += 1;
+            };
+            stack.push(Leaf);
+        };
+
+        this.get_stack = function(){
+            return stack;
+        };
+
+        return this;
+    };
+
     
     var Winternitz_OTS = function(){
         var self = this;
@@ -214,12 +250,14 @@ function xmss(){
     };
 
     this.winternitz = Winternitz_OTS;
+    this.treehash = Treehash;
 
     return this;
 };
 
 var x = new xmss();
 
+/*
 var test = new x.winternitz();
 var secretkey = test.generate_signature_key();
 test.set_signature_key(secretkey);
@@ -230,3 +268,13 @@ var signtext = hash_n('abc'), faketext = hash_n('cde');
 var signature = test.sign(hash_n('abc'));
 var verify = test.verify(signtext, signature);
 console.log(signature[0].length * 256 / 8, 'bytes');
+*/
+
+var test = new x.treehash(function(phi){
+    return [hash_n(phi.toString(2)), 0];
+});
+
+for(var i=0; i<Math.pow(2, 13); i++)
+    test.feed(i);
+
+console.log(test.get_stack());
