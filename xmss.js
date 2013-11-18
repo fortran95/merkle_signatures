@@ -227,4 +227,4 @@ var signtext = hash_n('abc'), faketext = hash_n('cde');
 
 var signature = test.sign(hash_n('abc'));
 var verify = test.verify(signtext, signature);
-console.log(verify);
+console.log(signature[0].length * 256);
