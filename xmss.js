@@ -161,7 +161,9 @@ function xmss(){
             };
 
             // in base w representation... 
-            C = C.toString(w).split('');
+            C = C.toString(w);
+            C = '00000000000000000000'.substr(0, l_2 - C.length) + C;
+            C = C.split('');
 
             // is appended to M.
             b = M.slice(0, M.length);
@@ -227,4 +229,4 @@ var signtext = hash_n('abc'), faketext = hash_n('cde');
 
 var signature = test.sign(hash_n('abc'));
 var verify = test.verify(signtext, signature);
-console.log(signature[0].length * 256);
+console.log(signature[0].length * 256 / 8, 'bytes');
