@@ -12,7 +12,6 @@
 var crypto = require('crypto'),
     buffer = require('buffer');
 function hash_n(data){
-    console.log(data.length);
     var algorithm = 'sha256', encoding = 'binary';
     var digestor = new crypto.createHash(algorithm);
     digestor.update(data, encoding);
@@ -116,8 +115,6 @@ function xmss(){
                 Leaf[1] += 1;
             };
             stack.push(Leaf);
-            console.log(stack);
-            console.log('----');
         };
 
         this.get_stack = function(){
