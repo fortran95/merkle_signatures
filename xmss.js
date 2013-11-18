@@ -12,6 +12,7 @@
 var crypto = require('crypto'),
     buffer = require('buffer');
 function hash_n(data){
+    console.log(data.length);
     var algorithm = 'sha256', encoding = 'binary';
     var digestor = new crypto.createHash(algorithm);
     digestor.update(data, encoding);
@@ -109,12 +110,14 @@ function xmss(){
                 Leaf[1] == stack[stack.length - 1][1]
             ){
                 var topNode = stack.pop();
-                Leaf[0] = hash_n(topNode[0] + Leaf[0]);
+                Leaf[0] = hash_n(buffer.Buffer.concat([topNode[0], Leaf[0]]));
                 
                 // I think after this the Leaf is raised a height?
                 Leaf[1] += 1;
             };
             stack.push(Leaf);
+            console.log(stack);
+            console.log('----');
         };
 
         this.get_stack = function(){
@@ -271,10 +274,14 @@ console.log(signature[0].length * 256 / 8, 'bytes');
 */
 
 var test = new x.treehash(function(phi){
-    return [hash_n(phi.toString(2)), 0];
+    return [hash_n(phi.toString()), 0];
 });
 
-for(var i=0; i<Math.pow(2, 13); i++)
+var bt = new Date().getTime();
+for(var i=0; i<Math.pow(2, 2); i++)
     test.feed(i);
+var et = new Date().getTime();
+
+console.log('Running lasted ' + (et - bt) + ' milliseconds.');
 
 console.log(test.get_stack());
